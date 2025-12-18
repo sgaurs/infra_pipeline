@@ -1,0 +1,36 @@
+# My Infra Pipeline
+
+name: Azure Infra Pipeline
+
+trigger: none
+
+pr:
+  branches:
+    include:
+      - main
+
+stages:
+  - stage: A
+    displayName: Infra_Planning
+    jobs:
+      - job: Job1
+        displayName: Terraform_Init-Validate-Format-Plan
+        steps:
+        
+
+
+  - stage: B
+    displayName: TF-Code_Scan
+    dependsOn: A
+
+  - stage: C
+    displayName: Manual_Validation
+    dependsOn: B
+
+  - stage: D
+    displayName: Infra_Creation
+    dependsOn: C
+
+  - stage: E
+    displayName: Infra_Destroy
+    dependsOn: D
