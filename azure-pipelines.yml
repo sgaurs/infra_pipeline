@@ -2,7 +2,13 @@
 
 name: Azure Infra Pipeline
 
-trigger: none
+trigger:
+  branches:
+    include:
+      - main
+      - feature/*
+
+pool: Sumit_Azure_Pipeline
 
 pr:
   branches:
@@ -14,23 +20,143 @@ stages:
     displayName: Infra_Planning
     jobs:
       - job: Job1
-        displayName: Terraform_Init-Validate-Format-Plan
+        displayName: Infra_Planning_Execution
         steps:
-        
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'init'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+            backendServiceArm: 'Sumit-Serv-Conn'
+            backendAzureRmOverrideSubscriptionID: 'b4461466-1e6b-4be2-bb70-1e96a72a41c8'
+            backendAzureRmResourceGroupName: 'Sumit_Backend_RG'
+            backendAzureRmStorageAccountName: 'mystate'
+            backendAzureRmContainerName: 'tfstate'
+            backendAzureRmKey: 'terraform.tfstate'
+
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'validate'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'custom'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+            outputTo: 'console'
+            customCommand: 'fmt'
+            environmentServiceNameAzureRM: 'Sumit-Serv-Conn'
+            environmentAzureRmOverrideSubscriptionID: 'b4461466-1e6b-4be2-bb70-1e96a72a41c8'
+
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'plan'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+            environmentServiceNameAzureRM: 'Sumit-Serv-Conn'
+            environmentAzureRmOverrideSubscriptionID: 'b4461466-1e6b-4be2-bb70-1e96a72a41c8'
 
 
   - stage: B
-    displayName: TF-Code_Scan
+    displayName: TF_Linting
+    condition: succeededOrFailed()
     dependsOn: A
+    jobs:
+      - job: Job1
+        displayName: TF_Lint_Execution
+        continueOnError: true
+        steps:
+        - task: trivy@2
+          inputs:
+            version: 'latest'
+            type: 'repository'
+            target: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+            scanners: 'misconfig'
+            severities: 'HIGH,CRITICAL'
+            ignoreUnfixed: true
+            failOnSeverityThreshold: 'HIGH'
 
   - stage: C
-    displayName: Manual_Validation
+    displayName: TF-Code_Scan
+    condition: succeededOrFailed()
     dependsOn: B
+    jobs:
+      - job: Job1
+        displayName: TF_Scan_Execution
+        continueOnError: true
+        steps:
+        - task: tfsec@1
+          inputs:
+            version: 'v1.26.0'
+            dir: '$(System.DefaultWorkingDirectory)/Environment/Dev'
 
   - stage: D
-    displayName: Infra_Creation
+    displayName: Manual_Validation
     dependsOn: C
+    pool: server
+    jobs:
+      - job: Job1
+        displayName: Manual_Validation_Execution
+        steps:
+        - task: ManualValidation@1
+          inputs:
+            notifyUsers: 'sumitvats08@brijkishorgupta290gmail.onmicrosoft.com'
+            approvers: 'sumitvats08@brijkishorgupta290gmail.onmicrosoft.com'
 
   - stage: E
-    displayName: Infra_Destroy
+    displayName: Infra_Creation
     dependsOn: D
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'],'refs/heads/main'),ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: job1
+        displayName: Infra_Creation_Execution
+        steps:
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'init'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+            backendServiceArm: 'Sumit-Serv-Conn'
+            backendAzureRmOverrideSubscriptionID: 'b4461466-1e6b-4be2-bb70-1e96a72a41c8'
+            backendAzureRmResourceGroupName: 'Sumit_Backend_RG'
+            backendAzureRmStorageAccountName: 'mystate'
+            backendAzureRmContainerName: 'tfstate'
+            backendAzureRmKey: 'terraform.tfstate'
+
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'apply'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+            commandOptions: '--auto-approve'
+            environmentServiceNameAzureRM: 'Sumit-Serv-Conn'
+            environmentAzureRmOverrideSubscriptionID: 'b4461466-1e6b-4be2-bb70-1e96a72a41c8'
+
+  - stage: F
+    displayName: Infra_Destroy
+    dependsOn: E
+    jobs:
+      - job: job1
+        steps:
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'init'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+            backendServiceArm: 'Sumit-Serv-Conn'
+            backendAzureRmOverrideSubscriptionID: 'b4461466-1e6b-4be2-bb70-1e96a72a41c8'
+            backendAzureRmResourceGroupName: 'Sumit_Backend_RG'
+            backendAzureRmStorageAccountName: 'mystate'
+            backendAzureRmContainerName: 'tfstate'
+            backendAzureRmKey: 'terraform.tfstate'
+
+        - task: TerraformTask@5
+          inputs:
+            provider: 'azurerm'
+            command: 'destroy'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/Environment/Dev'
+            commandOptions: '--auto-approve'
+            environmentServiceNameAzureRM: 'Sumit-Serv-Conn'
+            environmentAzureRmOverrideSubscriptionID: 'b4461466-1e6b-4be2-bb70-1e96a72a41c8'
