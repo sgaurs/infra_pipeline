@@ -61,7 +61,7 @@ stages:
 
   - stage: B
     displayName: TF_Linting
-    condition: succeededOrFailed()
+    condition: succeeded()
     dependsOn: A
     jobs:
       - job: Job1
@@ -94,6 +94,7 @@ stages:
 
   - stage: D
     displayName: Manual_Validation
+    condition: succeededOrFailed()
     dependsOn: C
     pool: server
     jobs:
